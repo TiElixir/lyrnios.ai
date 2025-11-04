@@ -1,0 +1,37 @@
+# Dependencies
+frontend/node_modules/
+frontend//.pnp
+frontend/.pnp.js
+
+# Testing
+frontend//coverage
+
+# Production
+frontend//dist
+frontend//build
+
+# Misc
+frontend/.DS_Store
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# Logs
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+frontend/lerna-debug.log*
+
+# Editor
+frontend/.vscode/
+frontend/.idea/
+frontend/*.swp
+frontend/*.swo
+frontend/*~
+
+# Vite
+frontend/.vite
+
+backend/.env

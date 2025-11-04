@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Send, Plus, Volume2, Square } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import axios from 'axios'
 import MathRenderer from './MathRenderer'
 import MermaidChart from './MermaidChart'
@@ -464,32 +465,47 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
 
                       {/* Right Column - Visual Content (1/3 width) */}
                       <div className="lg:col-span-1 space-y-4">
-                        {/* Mermaid Diagram */}
-                        {msg.data.mermaid_diagram && 
-                         (revealingSections[idx] || []).includes('mermaid_diagram') && (
-                          <div className="bg-card-opacity backdrop-blur-sm rounded-2xl border border-border p-6 animate-fadeIn">
-                            <h3 className="text-lg font-semibold text-text-primary mb-3">
-                              Diagram
-                            </h3>
-                            <div className="min-h-[100px]">
-                              {(() => {
-                                try {
-                                  return <MermaidChart diagram={msg.data.mermaid_diagram} />
-                                } catch (error) {
-                                  console.warn('Error rendering diagram component:', error)
-                                  return (
-                                    <div className="flex items-center justify-center h-24 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-                                      <div className="text-center">
-                                        <p className="text-gray-500 text-sm">Diagram temporarily unavailable</p>
-                                        <p className="text-gray-400 text-xs mt-1">Please try regenerating</p>
-                                      </div>
-                                    </div>
-                                  )
-                                }
-                              })()}
+                      {/* Mermaid Diagram */}
+                      {msg.data.mermaid_diagram && 
+                      (revealingSections[idx] || []).includes('mermaid_diagram') && (
+                        (() => {
+                          // Check if diagram has error indicators
+                          const hasError = msg.data.mermaid_diagram.includes('Diagram Not Available') || 
+                                          msg.data.mermaid_diagram.includes('Diagram Error') || 
+                                          msg.data.mermaid_diagram.includes('Please try regenerating') ||
+                                          msg.data.mermaid_diagram.includes('No diagram available')
+                          
+                          if (hasError) {
+                            return (
+                              <div className="bg-card-opacity backdrop-blur-sm rounded-2xl border border-border p-6 animate-fadeIn">
+                                <h3 className="text-lg font-semibold text-text-primary mb-3">
+                                  Diagram
+                                </h3>
+                                <div className="flex items-start gap-3 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                  <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                                  <div className="flex-1">
+                                    <p className="text-sm text-yellow-800 leading-relaxed">
+                                      <span className="font-medium">*</span> We are currently unable to generate a diagram for this query. 
+                                      Please try again later or enter a different query.
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          }
+                          
+                          return (
+                            <div className="bg-card-opacity backdrop-blur-sm rounded-2xl border border-border p-6 animate-fadeIn">
+                              <h3 className="text-lg font-semibold text-text-primary mb-3">
+                                Diagram
+                              </h3>
+                              <div className="min-h-[100px]">
+                                <MermaidChart diagram={msg.data.mermaid_diagram} />
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )
+                        })()
+                      )}
 
                         {/* Graph */}
                         {msg.data.graph && 

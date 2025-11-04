@@ -1,12 +1,15 @@
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { prism } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
 function CodeRenderer({ content }) {
   if (!content) return null
 
+  // Convert escaped newlines to actual newlines
+  const unescapedContent = content.replace(/\\n/g, '\n').replace(/\\t/g, '\t')
+
   // Extract code from code blocks - assume content starts with ```
   const codeBlockRegex = /```(\w+)?\n?([\s\S]*?)```/
-  const match = content.match(codeBlockRegex)
+  const match = unescapedContent.match(codeBlockRegex)
 
   if (!match) {
     // If no code block found, treat entire content as code
@@ -14,21 +17,21 @@ function CodeRenderer({ content }) {
       <div className="relative code-container">
         <div className="overflow-x-auto overflow-y-auto max-h-[600px] rounded-lg border border-border">
           <SyntaxHighlighter
-            language="text"
-            style={prism}
+            language="python"
+            style={vscDarkPlus}
             customStyle={{
               margin: 0,
               padding: '1rem',
-              borderRadius: 0,
+              borderRadius: '0.5rem',
               fontSize: '0.875rem',
               lineHeight: '1.6',
-              background: 'var(--color-code-bg)',
+              background: '#1e1e1e',
               minWidth: '100%',
               display: 'inline-block',
             }}
             wrapLines={false}
             wrapLongLines={false}
-            showLineNumbers={false}
+            showLineNumbers={true}
             codeTagProps={{
               style: {
                 fontFamily: 'Monaco, Menlo, "Ubuntu Mono", Consolas, "source-code-pro", monospace',
@@ -36,14 +39,14 @@ function CodeRenderer({ content }) {
             }}
             PreTag={({ children }) => <pre style={{ margin: 0 }}>{children}</pre>}
           >
-            {content.trim()}
+            {unescapedContent.trim()}
           </SyntaxHighlighter>
         </div>
       </div>
     )
   }
 
-  const language = match[1] || 'text'
+  const language = match[1] || 'python'
   const code = match[2]
 
   return (
@@ -51,20 +54,20 @@ function CodeRenderer({ content }) {
       <div className="overflow-x-auto overflow-y-auto max-h-[600px] rounded-lg border border-border">
         <SyntaxHighlighter
           language={language}
-          style={prism}
+          style={vscDarkPlus}
           customStyle={{
             margin: 0,
             padding: '1rem',
-            borderRadius: 0,
+            borderRadius: '0.5rem',
             fontSize: '0.875rem',
             lineHeight: '1.6',
-            background: 'var(--color-code-bg)',
+            background: '#1e1e1e',
             minWidth: '100%',
             display: 'inline-block',
           }}
           wrapLines={false}
           wrapLongLines={false}
-          showLineNumbers={false}
+          showLineNumbers={true}
           codeTagProps={{
             style: {
               fontFamily: 'Monaco, Menlo, "Ubuntu Mono", Consolas, "source-code-pro", monospace',
