@@ -7,6 +7,66 @@ import MermaidChart from './MermaidChart'
 import CodeRenderer from './CodeRenderer'
 import LoadingDots from './LoadingDots'
 
+// Helper function to check if code content is meaningful
+const isCodeContentMeaningful = (code) => {
+  if (!code || typeof code !== 'string') return false
+  
+  const trimmedCode = code.trim()
+  
+  // Empty or very short content
+  if (trimmedCode.length < 10) return false
+  
+  // Check for common "no code" indicators
+  const noCodeIndicators = [
+    /^n\/?a$/i,
+    /^none$/i,
+    /^not applicable$/i,
+    /^no code$/i,
+    /^no code available$/i,
+    /^no code example$/i,
+    /^markdown/i,
+    /^this is (?:just )?(?:a )?(?:text|markdown|explanation)/i,
+  ]
+  
+  if (noCodeIndicators.some(pattern => pattern.test(trimmedCode))) {
+    return false
+  }
+  
+  // Check if it's just markdown or plain text (no code syntax)
+  // Look for common code indicators: code blocks, keywords, syntax elements
+  const codeIndicators = [
+    /```/,  // Code blocks
+    /^\s*(?:def|class|function|const|let|var|import|from|if|for|while|return)\s+/m, // Keywords
+    /[{}\[\];()]/,  // Syntax characters (but be lenient)
+    /(?:^|\n)\s*#include/m,  // C/C++ includes
+    /(?:^|\n)\s*package\s+/m,  // Java package
+  ]
+  
+  // If it has code indicators, it's meaningful
+  if (codeIndicators.some(pattern => pattern.test(trimmedCode))) {
+    return true
+  }
+  
+  // If it's just short text without code indicators, it's not meaningful
+  if (trimmedCode.length < 50 && !/[{}\[\];()=]/.test(trimmedCode)) {
+    return false
+  }
+  
+  // For longer content, check if it has some code-like structure
+  const lines = trimmedCode.split('\n')
+  const codeLines = lines.filter(line => {
+    const l = line.trim()
+    return l.length > 0 && (
+      /[{}\[\];()=]/.test(l) ||  // Has syntax characters
+      /^\s*(?:def|class|function|const|let|var|if|for|while|return)/.test(l)  // Has keywords
+    )
+  })
+  
+  // If at least 20% of non-empty lines look like code, consider it meaningful
+  const nonEmptyLines = lines.filter(l => l.trim().length > 0).length
+  return nonEmptyLines > 0 && (codeLines.length / nonEmptyLines) >= 0.2
+}
+
 // Graph Image Component
 function GraphImage({ imageData, description }) {
   if (!imageData || !imageData.trim()) {
@@ -527,8 +587,8 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
                         )}
 
                         {/* Code */}
-                        {msg.data.code && 
-                         (revealingSections[idx] || []).includes('code') && (
+                        {msg.data.code && isCodeContentMeaningful(msg.data.code) &&
+                          (revealingSections[idx] || []).includes('code') && (
                           <div className="bg-card-opacity backdrop-blur-sm rounded-2xl border border-border p-6 animate-fadeIn overflow-hidden">
                             <h3 className="text-lg font-semibold text-text-primary mb-3">
                               Code Example

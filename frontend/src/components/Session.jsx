@@ -9,7 +9,7 @@ function Session() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const query = decodeURIComponent(searchParams.get('q') || '')
-  const urlApiEndpoint = searchParams.get('api') || 'demo'
+  const urlApiEndpoint = searchParams.get('api') || 'generate'
   const [error, setError] = useState(null)
   const [apiEndpoint, setApiEndpoint] = useState(urlApiEndpoint) // 'demo' or 'generate'
 

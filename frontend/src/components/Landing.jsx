@@ -7,7 +7,7 @@ import RotatingText from './RotatingText'
 
 function Landing() {
   const [query, setQuery] = useState('')
-  const [apiEndpoint, setApiEndpoint] = useState('demo') // 'demo' or 'generate'
+  const [apiEndpoint, setApiEndpoint] = useState('generate') // 'demo' or 'generate'
   const navigate = useNavigate()
 
   const handleSubmit = (e) => {
