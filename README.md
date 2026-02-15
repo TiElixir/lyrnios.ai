@@ -17,13 +17,18 @@
 - **Text-to-Speech Integration:** Built-in narration using Puter.js.
 - **Personalized Study Plans:** Custom learning roadmaps.
 
+### New Features (v2.0)
+- **🔐 Google Authentication:** Secure sign-in with Google OAuth.
+- **💬 Chat History:** Persistent conversation history stored in database.
+- **💾 Session Management:** Resume past learning sessions anytime.
+- **📱 Dedicated Login Page:** Beautiful glassmorphism login interface.
+
 ### Technical Features
 - **Dual API Modes:**
   - `demo` – Preloaded examples for testing.
   - `generate` – Live AI content generation.
 - **Responsive Design:** GitHub-inspired UI with glassmorphism.
 - **Real-time Chat Interface:** Conversational learning experience.
-- **Session Management:** UUID-based tracking.
 - **Syntax Highlighting:** Multi-language code display.
 - **LaTeX Rendering:** Math support via KaTeX.
 
@@ -35,6 +40,7 @@
 - Python 3.8+
 - Node.js 16+
 - Google Gemini API Key
+- Google Cloud Console Project (for OAuth)
 
 ### Installation
 
@@ -51,7 +57,19 @@ python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env
-# Add API keys to .env
+```
+
+**Configure Environment (.env)**
+You need to set up a project in [Google Cloud Console](https://console.cloud.google.com/) for OAuth.
+```ini
+# Gemini AI
+API_KEYS="your_gemini_api_key_1,your_gemini_api_key_2"
+
+# Google OAuth
+GOOGLE_CLIENT_ID="your_google_client_id"
+GOOGLE_CLIENT_SECRET="your_google_client_secret"
+SECRET_KEY="your_random_secret_key"
+FRONTEND_URL="http://localhost:3000"
 ```
 
 **Frontend Setup**
@@ -61,31 +79,27 @@ npm install
 npm run dev
 ```
 
-**Environment Example**
-```json
-API_KEYS="your_gemini_api_key_1,your_gemini_api_key_2"
-```
-
 **Run the Application**
 ```bash
-# Terminal 1
+# Terminal 1 (Backend)
 cd backend
 make dev  # or uvicorn app:app --reload --port 8000
 
-# Terminal 2
+# Terminal 2 (Frontend)
 cd frontend
-make dev  # or npm run dev
+npm run dev
 ```
-Visit **http://localhost:3000**
+Visit **http://localhost:3000** causing a redirect to the login page.
 
 ---
 
 ## 🎯 Usage
 
 ### Basic Flow
-1. Enter a topic or question in the input bar.  
-2. Press **Enter** or click **Send**.  
+1. **Sign in** with your Google account.
+2. Enter a topic or question in the input bar on the landing page.
 3. Watch content reveal progressively.
+4. Access **Chat History** via the sidebar (click the 💬 icon).
 
 ### Sections
 - **Foundations** – Core prerequisites  
@@ -106,39 +120,26 @@ Visit **http://localhost:3000**
 
 ## 🧩 API Endpoints
 
-**Generate Content**
-```bash
-POST http://127.0.0.1:8000/generate
-Content-Type: application/json
-{
-  "prompt": "Teach me about linear regression"
-}
-```
-
-**Demo Content**
-```bash
-POST http://127.0.0.1:8000/demo
-Content-Type: application/json
-{
-  "prompt": "write"
-}
-```
+| Method | Path | Description | Auth Required |
+|--------|------|-------------|---------------|
+| `GET` | `/auth/google` | Initiate OAuth login | No |
+| `GET` | `/sessions` | List user sessions | Yes |
+| `POST` | `/sessions` | Create new session | Yes |
+| `GET` | `/sessions/{id}` | Get session details | Yes |
+| `POST` | `/generate` | Generate AI content | Yes |
 
 ---
 
 ## 🏗️ Architecture
 
 ### Overview
-```
-┌─────────────────┐         ┌─────────────────┐
-│ React Frontend  │ ◄─────► │ FastAPI Backend │
-│ (Port 3000)     │         │ (Port 8000)     │
-└─────────────────┘         └────────┬────────┘
-                                     │
-                            ┌────────▼────────┐
-                            │ Google Gemini   │
-                            │     API         │
-                            └─────────────────┘
+```mermaid
+graph TD
+    User[Clients] --> Frontend[React Frontend :3000]
+    Frontend --> Backend[FastAPI Backend :8000]
+    Backend --> DB[(SQLite Database)]
+    Backend --> Gemini[Google Gemini API]
+    Backend --> Google[Google OAuth]
 ```
 
 ### Stack
@@ -146,25 +147,27 @@ Content-Type: application/json
 React, React Router, Tailwind, Mermaid, KaTeX, Axios, Framer Motion, React Markdown, Puter.js
 
 #### Backend
-FastAPI, Uvicorn, Google Gemini API, Pydantic, Python-dotenv
+FastAPI, Uvicorn, Google Gemini API, Authlib (OAuth), SQLAlchemy, SQLite, Pydantic
 
 ### Structure
 ```
 lyrnios-ai/
 ├── backend/
-│   ├── ai.py
-│   ├── app.py
-│   ├── demos/
-│   ├── requirements.txt
-│   └── Makefile
+│   ├── app.py           # API Routes
+│   ├── auth.py          # OAuth & JWT logic
+│   ├── database.py      # DB Models & CRUD
+│   ├── ai.py            # Gemini Wrapper
+│   └── lyrnios_auth.db  # SQLite Database
 │
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   ├── App.jsx
-│   │   ├── main.jsx
-│   │   └── index.css
-│   └── Makefile
+│   │   │   ├── Login.jsx
+│   │   │   ├── ChatHistory.jsx
+│   │   │   └── Session.jsx
+│   │   ├── context/
+│   │   │   └── AuthContext.jsx
+│   └── index.css
 └── README.md
 ```
 
@@ -180,47 +183,13 @@ API_KEYS=key1,key2,key3
 
 **Model Parameters**
 ```python
-model = "gemini-2.5-flash"
+model = "gemini-2.0-flash"
 temperature = 0.3
 max_output_tokens = 8192
 ```
 
-### Frontend
-**API Mode**
-```javascript
-const [apiEndpoint, setApiEndpoint] = useState('generate');
-```
-
 **Styling**
 Edit `frontend/src/colors.css` to adjust theme.
-
----
-
-## 📊 API Response Format
-
-```json
-{
-  "foundations": "Core concepts and prerequisites...",
-  "concepts": "Detailed explanations...",
-  "formulas": "Mathematical representations...",
-  "keyconcepts": "Essential takeaways...",
-  "problems": "Practice exercises...",
-  "study_plan": "Structured learning path...",
-  "further_questions": ["Question 1", "Question 2"],
-  "mermaid_diagram": "graph TD\nA-->B",
-  "graph": { "description": "Graph", "image": "data:image/png;base64,..." },
-  "code": "```python\nprint('Hello')\n```"
-}
-```
-
----
-
-## 🚨 Error Handling
-
-- Invalid diagrams replaced with placeholders  
-- Automatic key rotation on API failure  
-- JSON repair for malformed responses  
-- Validation for diagrams, code blocks, and base64 data
 
 ---
 
@@ -231,12 +200,6 @@ Edit `frontend/src/colors.css` to adjust theme.
 3. Commit: `git commit -m "Add new feature"`  
 4. Push: `git push origin feature/new-feature`  
 5. Submit a PR
-
-### Guidelines
-- Follow code style  
-- Document complex logic  
-- Ensure responsiveness  
-- Test across browsers
 
 ---
 
@@ -257,8 +220,9 @@ See [LICENSE](LICENSE) for details.
 ---
 
 ## 🗺️ Roadmap
-- [ ] User authentication  
-- [ ] Save/resume sessions  
+- [x] User authentication (Google OAuth)
+- [x] Save/resume sessions (SQLite)
+- [x] Chat History UI
 - [ ] PDF export  
 - [ ] Mobile app  
 - [ ] Video generation (important)
