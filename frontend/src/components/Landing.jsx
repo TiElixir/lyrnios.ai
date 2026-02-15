@@ -1,14 +1,19 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { v4 as uuidv4 } from 'uuid'
-import { Plus, Send, Settings, User } from 'lucide-react'
+import { Plus, Send, Settings, MessageSquare, X } from 'lucide-react'
 import RotatingText from './RotatingText'
+import { useAuth } from '../context/AuthContext'
+import UserProfile from './UserProfile'
+import ChatHistory from './ChatHistory'
 
 
 function Landing() {
   const [query, setQuery] = useState('')
   const [apiEndpoint, setApiEndpoint] = useState('generate') // 'demo' or 'generate'
+  const [showChats, setShowChats] = useState(false)
   const navigate = useNavigate()
+  const { isAuthenticated } = useAuth()
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -36,45 +41,59 @@ function Landing() {
 
 
       <div className="flex h-full bg-gradient-to-br from-bg-gradient-start via-bg-gradient-mid to-bg-gradient-end relative z-10"
-            style={{
-    backgroundImage: `url("/public/bg-pattern.png")`,
-    backgroundSize: "cover",
-    backgroundRepeat: "no-repeat",
-    backgroundBlendMode:"color",
-    minHeight: "100vh"
-    
-    
-  }}>
-        
+        style={{
+          backgroundImage: `url("/bg-pattern.png")`,
+          backgroundSize: "cover",
+          backgroundRepeat: "no-repeat",
+          backgroundBlendMode: "color",
+          minHeight: "100vh"
+
+
+        }}>
+
         {/* Sidebar */}
-        <div className="w-24 bg-sidebar border-r border-border flex flex-col items-center py-6 space-y-6">
-          <button className="bg-button w-12 h-12 rounded-full bg-button hover:bg-button-hover transition-colors flex items-center justify-center ">
-            <div className="w-6 h-6 rounded-full bg-loading" />
-          </button>
-          
-          <button className="w-12 h-12 rounded-full bg-button hover:bg-button-hover transition-colors flex items-center justify-center">
-            <Settings className="w-5 h-5 text-icon-on-button" />
-          </button>
-          
-          <button className="w-12 h-12 rounded-full bg-button hover:bg-button-hover transition-colors flex items-center justify-center">
-            <User className="w-5 h-5 text-icon-on-button" />
-          </button>
-        </div>
+        {showChats ? (
+          <div className="relative z-20 flex">
+            <ChatHistory />
+            <button
+              onClick={() => setShowChats(false)}
+              className="absolute top-4 right-[-40px] w-8 h-8 rounded-full bg-card-opacity backdrop-blur-sm border border-border flex items-center justify-center hover:bg-button-hover transition-colors"
+              title="Hide chats"
+            >
+              <X className="w-4 h-4 text-text-primary" />
+            </button>
+          </div>
+        ) : (
+          <div className="w-24 bg-sidebar border-r border-border flex flex-col items-center py-6 space-y-6 z-20">
+            <button
+              onClick={() => setShowChats(true)}
+              className="w-12 h-12 rounded-full bg-button hover:bg-button-hover transition-colors flex items-center justify-center"
+              title="Show chats"
+            >
+              <MessageSquare className="w-5 h-5 text-icon-on-button" />
+            </button>
+
+            <button className="w-12 h-12 rounded-full bg-button hover:bg-button-hover transition-colors flex items-center justify-center">
+              <Settings className="w-5 h-5 text-icon-on-button" />
+            </button>
+          </div>
+        )}
 
         {/* Main Content */}
         <div className="flex-1 flex flex-col items-center justify-center px-8 absolute inset-0 z-5">
-          
-          {/* API Endpoint Toggle - Top Right */}
-          <div className="absolute top-6 right-6 z-20">
+
+          {/* Top Right Controls */}
+          <div className="absolute top-6 right-6 z-20 flex items-center gap-4">
+            {isAuthenticated && <UserProfile />}
+
             <div className="flex items-center gap-2 bg-card-opacity backdrop-blur-sm rounded-full px-4 py-2 border border-border">
               <span className="text-xs text-text-secondary font-mono">API:</span>
               <button
                 onClick={toggleApiEndpoint}
-                className={`px-3 py-1 rounded-full text-xs font-mono transition-colors ${
-                  apiEndpoint === 'demo' 
-                    ? 'bg-blue-500 text-white' 
-                    : 'bg-green-500 text-white'
-                }`}
+                className={`px-3 py-1 rounded-full text-xs font-mono transition-colors ${apiEndpoint === 'demo'
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-green-500 text-white'
+                  }`}
                 title={`Currently using /${apiEndpoint} endpoint. Click to switch.`}
               >
                 /{apiEndpoint}
@@ -83,14 +102,14 @@ function Landing() {
           </div>
 
           <div className="max-w-4xl w-full space-y-8">
-            
+
             {/* Header */}
             <div className="text-center space-y-4 flex flex-col items-center">
-              
+
               <div className='flex flex-row items-center'>
-                
+
                 <RotatingText
-                  texts={['Hello', 'नमस्ते', 'নমস্কার','నమస్కారం','ନମସ୍କାର']}
+                  texts={['Hello', 'नमस्ते', 'নমস্কার', 'నమస్కారం', 'ନମସ୍କାର']}
                   mainClassName="select-none text-6xl font-bold px-2 sm:px-2 md:px-3 bg-black-200 text-black overflow-hidden pt-1 justify-center rounded-lg"
                   staggerFrom={"last"}
                   initial={{ y: "100%" }}
@@ -101,14 +120,14 @@ function Landing() {
                   transition={{ type: "spring", damping: 30, stiffness: 400 }}
                   rotationInterval={2000}
                 />
-                
+
                 <p className="select-none text-6xl font-bold px-2 sm:px-2 md:px-3 bg-black-200 text-black overflow-hidden py-0.5 justify-center rounded-lg">
                   Student
                 </p>
-                
+
 
               </div>
-              
+
               <p className="text-2xl text-text-tertiary select-none">
                 What do you want to learn about?
               </p>
@@ -125,9 +144,9 @@ function Landing() {
                   >
                     <Plus className="w-6 h-6 text-icon-on-button" />
                   </button>
-                  
+
                   <textarea
-                  
+
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="Ask me something..."
@@ -141,7 +160,7 @@ function Landing() {
                       }
                     }}
                   />
-                  
+
                   <button
                     type="submit"
                     disabled={!query.trim()}
@@ -150,7 +169,7 @@ function Landing() {
                     <Send className="w-5 h-5 text-icon-on-button" />
                   </button>
                 </div>
-                
+
                 {/* Suggestion Pills */}
                 <div className="flex flex-wrap gap-3 mt-4">
                   <button

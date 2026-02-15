@@ -5,16 +5,17 @@ import MathRenderer from './MathRenderer'
 import MermaidChart from './MermaidChart'
 import CodeRenderer from './CodeRenderer'
 import LoadingDots from './LoadingDots'
+import { useAuth } from '../context/AuthContext'
 
 // Helper function to check if code content is meaningful
 const isCodeContentMeaningful = (code) => {
   if (!code || typeof code !== 'string') return false
-  
+
   const trimmedCode = code.trim()
-  
+
   // Empty or very short content
   if (trimmedCode.length < 10) return false
-  
+
   // Check for common "no code" indicators
   const noCodeIndicators = [
     /^n\/?a$/i,
@@ -26,11 +27,11 @@ const isCodeContentMeaningful = (code) => {
     /^markdown/i,
     /^this is (?:just )?(?:a )?(?:text|markdown|explanation)/i,
   ]
-  
+
   if (noCodeIndicators.some(pattern => pattern.test(trimmedCode))) {
     return false
   }
-  
+
   // Check if it's just markdown or plain text (no code syntax)
   // Look for common code indicators: code blocks, keywords, syntax elements
   const codeIndicators = [
@@ -40,17 +41,17 @@ const isCodeContentMeaningful = (code) => {
     /(?:^|\n)\s*#include/m,  // C/C++ includes
     /(?:^|\n)\s*package\s+/m,  // Java package
   ]
-  
+
   // If it has code indicators, it's meaningful
   if (codeIndicators.some(pattern => pattern.test(trimmedCode))) {
     return true
   }
-  
+
   // If it's just short text without code indicators, it's not meaningful
   if (trimmedCode.length < 50 && !/[{}\[\];()=]/.test(trimmedCode)) {
     return false
   }
-  
+
   // For longer content, check if it has some code-like structure
   const lines = trimmedCode.split('\n')
   const codeLines = lines.filter(line => {
@@ -60,7 +61,7 @@ const isCodeContentMeaningful = (code) => {
       /^\s*(?:def|class|function|const|let|var|if|for|while|return)/.test(l)  // Has keywords
     )
   })
-  
+
   // If at least 20% of non-empty lines look like code, consider it meaningful
   const nonEmptyLines = lines.filter(l => l.trim().length > 0).length
   return nonEmptyLines > 0 && (codeLines.length / nonEmptyLines) >= 0.2
@@ -69,12 +70,12 @@ const isCodeContentMeaningful = (code) => {
 // Helper function to check if diagram content is valid
 const isDiagramContentValid = (diagram) => {
   if (!diagram || typeof diagram !== 'string') return false
-  
+
   const trimmedDiagram = diagram.trim()
-  
+
   // Empty content
   if (trimmedDiagram.length < 10) return false
-  
+
   // Check for error indicators
   const errorIndicators = [
     'Diagram Not Available',
@@ -84,11 +85,11 @@ const isDiagramContentValid = (diagram) => {
     'Response Error',
     'Please regenerate'
   ]
-  
+
   if (errorIndicators.some(indicator => trimmedDiagram.includes(indicator))) {
     return false
   }
-  
+
   return true
 }
 
@@ -99,7 +100,7 @@ function GraphImage({ imageData, description }) {
   }
 
   const trimmedData = imageData.trim()
-  
+
   // Handle different image formats
   let imageSrc = ''
   if (trimmedData.startsWith('data:')) {
@@ -127,8 +128,8 @@ function GraphImage({ imageData, description }) {
       src={imageSrc}
       alt={description || "Graph visualization"}
       className="w-full h-auto max-w-full"
-      style={{ 
-        maxWidth: '100%', 
+      style={{
+        maxWidth: '100%',
         height: 'auto',
         display: 'block'
       }}
@@ -146,19 +147,21 @@ function GraphImage({ imageData, description }) {
   )
 }
 
-function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange }) {
-  const [messages, setMessages] = useState([
-    { role: 'user', content: initialQuery }
-  ])
+function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange, sessionId, loadExisting }) {
+  const [messages, setMessages] = useState(
+    (loadExisting || !initialQuery) ? [] : [{ role: 'user', content: initialQuery }]
+  )
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [revealingSections, setRevealingSections] = useState({})
   const [isRevealing, setIsRevealing] = useState(false)
   const [speakingSectionId, setSpeakingSectionId] = useState(null)
   const [videoTimers, setVideoTimers] = useState({})
+  const initialLoadedRef = useRef(false)
   const messagesEndRef = useRef(null)
   const chatContainerRef = useRef(null)
   const currentAudioRef = useRef(null)
+  const { apiClient } = useAuth()
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -168,16 +171,75 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
     scrollToBottom()
   }, [messages, revealingSections])
 
+  // Load existing session messages if loading from history or on reload
   useEffect(() => {
-    if (initialQuery && messages.length === 1) {
+    if (initialLoadedRef.current) return
+    initialLoadedRef.current = true
+
+    if ((loadExisting || !initialQuery) && sessionId) {
+      loadSessionMessages()
+    } else if (initialQuery && messages.length === 1) {
       handleInitialLoad()
     }
   }, [])
 
+  const loadSessionMessages = async () => {
+    try {
+      setLoading(true)
+      const response = await apiClient.get(`/sessions/${sessionId}`)
+      const sessionData = response.data
+
+      if (sessionData.messages && sessionData.messages.length > 0) {
+        const loadedMessages = sessionData.messages.map(m => ({
+          role: m.role,
+          content: m.content || undefined,
+          data: m.data || undefined
+        }))
+        setMessages(loadedMessages)
+
+        // Reveal all sections for assistant messages immediately
+        const newRevealingSections = {}
+        loadedMessages.forEach((msg, idx) => {
+          if (msg.role === 'assistant' && msg.data) {
+            const allSections = [
+              'foundations', 'concepts', 'formulas', 'keyconcepts',
+              'problems', 'study_plan', 'further_questions',
+              'mermaid_diagram', 'graph', 'code', 'video'
+            ].filter(key => msg.data[key])
+            newRevealingSections[idx] = allSections
+          }
+        })
+        setRevealingSections(newRevealingSections)
+      }
+    } catch (error) {
+      console.error('Failed to load session:', error)
+      // Session not found — might have been deleted
+      if (error.response?.status === 404) {
+        setMessages([{ role: 'assistant', content: 'This session no longer exists. Start a new chat!' }])
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Save a message to the backend
+  const saveMessage = async (role, content = null, data = null) => {
+    if (!sessionId) return
+    try {
+      await apiClient.post(`/sessions/${sessionId}/messages`, {
+        role,
+        content,
+        data
+      })
+    } catch (error) {
+      console.error('Failed to save message:', error)
+    }
+  }
+
   const revealSectionsProgressively = async (messageIndex, data) => {
     const sections = [
       'foundations',
-      'concepts', 
+      'concepts',
       'formulas',
       'keyconcepts',
       'problems',
@@ -190,7 +252,7 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
     ]
 
     setIsRevealing(true)
-    
+
     for (let i = 0; i < sections.length; i++) {
       const sectionKey = sections[i]
       // Handle nested graph object
@@ -209,7 +271,7 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
           ...prev,
           [messageIndex]: [...(prev[messageIndex] || []), sectionKey]
         }))
-        
+
         // Start timer for this video section
         const videoSectionId = `video-${messageIndex}`
         setTimeout(() => {
@@ -218,7 +280,7 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
             [videoSectionId]: true
           }))
         }, 10000) // 10 seconds
-        
+
       } else if (data[sectionKey]) {
         await new Promise(resolve => setTimeout(resolve, 1000))
         setRevealingSections(prev => ({
@@ -227,9 +289,9 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
         }))
       }
     }
-    
+
     setIsRevealing(false)
-    
+
     // Scroll to top after all sections are revealed
     setTimeout(() => {
       if (chatContainerRef.current) {
@@ -240,21 +302,28 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
 
   const handleInitialLoad = async () => {
     setLoading(true)
+
+    // Save the initial user message
+    await saveMessage('user', initialQuery)
+
     try {
       const endpoint = apiEndpoint || 'demo'
       const response = await axios.post(`http://127.0.0.1:8000/${endpoint}`, { prompt: initialQuery })
       const responseData = response.data
-      
+
       const assistantMessage = {
         role: 'assistant',
         data: responseData
       }
-      
+
       setMessages(prev => [...prev, assistantMessage])
-      
+
+      // Save assistant message
+      await saveMessage('assistant', null, responseData)
+
       const messageIndex = 1
       await revealSectionsProgressively(messageIndex, responseData)
-      
+
       if (onResponseUpdate) {
         onResponseUpdate(responseData)
       }
@@ -280,24 +349,30 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
     setInput('')
     setLoading(true)
 
+    // Save user message
+    await saveMessage('user', currentInput)
+
     try {
       const endpoint = apiEndpoint || 'demo'
-      const response = await axios.post(`http://127.0.0.1:8000/${endpoint}`, { 
+      const response = await axios.post(`http://127.0.0.1:8000/${endpoint}`, {
         prompt: currentInput
       })
-      
+
       const responseData = response.data
       const messageIndex = messages.length + 1
-      
+
       const assistantMessage = {
         role: 'assistant',
         data: responseData
       }
-      
+
       setMessages(prev => [...prev, assistantMessage])
-      
+
+      // Save assistant message
+      await saveMessage('assistant', null, responseData)
+
       await revealSectionsProgressively(messageIndex, responseData)
-      
+
       if (onResponseUpdate) {
         onResponseUpdate(responseData)
       }
@@ -318,21 +393,27 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
     setMessages(prev => [...prev, userMessage])
     setLoading(true)
 
+    // Save user message
+    await saveMessage('user', question)
+
     try {
       const endpoint = apiEndpoint || 'demo'
       const response = await axios.post(`http://127.0.0.1:8000/${endpoint}`, { prompt: question })
       const responseData = response.data
       const messageIndex = messages.length + 1
-      
+
       const assistantMessage = {
         role: 'assistant',
         data: responseData
       }
-      
+
       setMessages(prev => [...prev, assistantMessage])
-      
+
+      // Save assistant message
+      await saveMessage('assistant', null, responseData)
+
       await revealSectionsProgressively(messageIndex, responseData)
-      
+
       if (onResponseUpdate) {
         onResponseUpdate(responseData)
       }
@@ -359,13 +440,13 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
   // Extract plain text from markdown content for text-to-speech
   const extractPlainText = (markdown) => {
     if (!markdown) return ''
-    
+
     // Remove math blocks ($$...$$ and \(...\))
     let text = markdown.replace(/\$\$[\s\S]*?\$\$/g, '')
     text = text.replace(/\$[^$]+\$/g, '')
     text = text.replace(/\\\([\s\S]*?\\\)/g, '')
     text = text.replace(/\\\[[\s\S]*?\\\]/g, '')
-    
+
     // Remove markdown syntax
     text = text.replace(/#{1,6}\s+/g, '') // Headers
     text = text.replace(/\*\*([^*]+)\*\*/g, '$1') // Bold
@@ -377,23 +458,23 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
     text = text.replace(/^\s*[-*+]\s+/gm, '') // Bullet points
     text = text.replace(/^\s*\d+\.\s+/gm, '') // Numbered lists
     text = text.replace(/>\s+/g, '') // Blockquotes
-    
+
     // Clean up extra whitespace
     text = text.replace(/\n{3,}/g, '\n\n')
     text = text.trim()
-    
+
     return text
   }
 
   const handleTextToSpeech = async (content, sectionId) => {
     if (!content) return
-    
+
     // Check if Puter.js is available
     if (typeof window.puter === 'undefined') {
       alert('Puter.js is not loaded. Please refresh the page and try again.')
       return
     }
-    
+
     // If the same section is already speaking, stop it
     if (speakingSectionId === sectionId && currentAudioRef.current) {
       currentAudioRef.current.pause()
@@ -401,43 +482,43 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
       setSpeakingSectionId(null)
       return
     }
-    
+
     // Stop any ongoing audio from other sections
     if (currentAudioRef.current) {
       currentAudioRef.current.pause()
       currentAudioRef.current = null
     }
-    
+
     const plainText = extractPlainText(content)
     if (!plainText) {
       return
     }
-    
+
     try {
       // Set speaking state immediately
       setSpeakingSectionId(sectionId)
-      
+
       // Use Puter.js for text-to-speech
       const audio = await window.puter.ai.txt2speech(plainText)
-      
+
       // Store reference for cleanup
       currentAudioRef.current = audio
-      
+
       // Set up event listeners
       audio.onended = () => {
         setSpeakingSectionId(null)
         currentAudioRef.current = null
       }
-      
+
       audio.onerror = (error) => {
         console.error('Puter TTS error:', error)
         setSpeakingSectionId(null)
         currentAudioRef.current = null
       }
-      
+
       // Play the audio
       await audio.play()
-      
+
     } catch (error) {
       console.error('Error with Puter TTS:', error)
       setSpeakingSectionId(null)
@@ -445,7 +526,7 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
       alert('Error generating speech. Please try again.')
     }
   }
-  
+
   // Cleanup audio on unmount
   useEffect(() => {
     return () => {
@@ -458,7 +539,7 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
 
   return (
     <div className="flex flex-col h-full">
-      <div 
+      <div
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto px-8 py-6"
       >
@@ -480,7 +561,7 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
                       </div>
                     </div>
                   )}
-                  
+
                   {msg.data && (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                       {/* Left Column - Text Content (2/3 width) */}
@@ -488,14 +569,14 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
                         {textSections.map((section) => {
                           const revealed = revealingSections[idx] || []
                           const isRevealed = revealed.includes(section.key)
-                          
+
                           return msg.data[section.key] && isRevealed ? (
                             (() => {
                               const sectionId = `${idx}-${section.key}`
                               const isSpeaking = speakingSectionId === sectionId
                               return (
-                                <div 
-                                  key={section.key} 
+                                <div
+                                  key={section.key}
                                   className="bg-card-opacity backdrop-blur-sm rounded-2xl border border-border p-6 animate-fadeIn"
                                 >
                                   <div className="flex items-center justify-between mb-3">
@@ -525,104 +606,100 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
                         })}
 
                         {/* Further Questions */}
-                        {msg.data.further_questions && 
-                         msg.data.further_questions.length > 0 && 
-                         (revealingSections[idx] || []).includes('further_questions') && (
-                          <div className="bg-card-opacity backdrop-blur-sm rounded-2xl border border-border p-6 animate-fadeIn">
-                            <h3 className="text-lg font-semibold text-text-primary mb-3">
-                              Further Questions
-                            </h3>
-                            <div className="flex flex-wrap gap-2">
-                              {msg.data.further_questions.map((question, qIdx) => (
-                                <button
-                                  key={qIdx}
-                                  onClick={() => handleQuestionClick(question)}
-                                  disabled={loading}
-                                  className="px-4 py-2 rounded-full bg-button-opacity hover:bg-button text-text-primary text-sm transition-colors disabled:opacity-50"
-                                >
-                                  {question}
-                                </button>
-                              ))}
+                        {msg.data.further_questions &&
+                          msg.data.further_questions.length > 0 &&
+                          (revealingSections[idx] || []).includes('further_questions') && (
+                            <div className="bg-card-opacity backdrop-blur-sm rounded-2xl border border-border p-6 animate-fadeIn">
+                              <h3 className="text-lg font-semibold text-text-primary mb-3">
+                                Further Questions
+                              </h3>
+                              <div className="flex flex-wrap gap-2">
+                                {msg.data.further_questions.map((question, qIdx) => (
+                                  <button
+                                    key={qIdx}
+                                    onClick={() => handleQuestionClick(question)}
+                                    disabled={loading}
+                                    className="px-4 py-2 rounded-full bg-button-opacity hover:bg-button text-text-primary text-sm transition-colors disabled:opacity-50"
+                                  >
+                                    {question}
+                                  </button>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
                       </div>
 
                       {/* Right Column - Visual Content (1/3 width) */}
                       <div className="lg:col-span-1 space-y-4">
                         {/* Mermaid Diagram - Only show if valid content exists */}
-                        {msg.data.mermaid_diagram && 
-                         isDiagramContentValid(msg.data.mermaid_diagram) &&
-                         (revealingSections[idx] || []).includes('mermaid_diagram') && (
-                          <div className="bg-card-opacity backdrop-blur-sm rounded-2xl border border-border p-6 animate-fadeIn">
-                            <h3 className="text-lg font-semibold text-text-primary mb-3">
-                              Diagram
-                            </h3>
-                            <div className="min-h-[100px]">
-                              <MermaidChart diagram={msg.data.mermaid_diagram} />
+                        {msg.data.mermaid_diagram &&
+                          isDiagramContentValid(msg.data.mermaid_diagram) &&
+                          (revealingSections[idx] || []).includes('mermaid_diagram') && (
+                            <div className="bg-card-opacity backdrop-blur-sm rounded-2xl border border-border p-6 animate-fadeIn">
+                              <h3 className="text-lg font-semibold text-text-primary mb-3">
+                                Diagram
+                              </h3>
+                              <div className="min-h-[100px]">
+                                <MermaidChart diagram={msg.data.mermaid_diagram} />
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
 
                         {/* Graph */}
-                        {msg.data.graph && 
-                         msg.data.graph.image &&
-                         (revealingSections[idx] || []).includes('graph') && (
-                          <div className="bg-card-opacity backdrop-blur-sm rounded-2xl border border-border p-6 animate-fadeIn">
-                            <h3 className="text-lg font-semibold text-text-primary mb-3">
-                              Graph
-                            </h3>
-                            {msg.data.graph.description && (
-                              <p className="text-text-primary text-sm mb-4 leading-relaxed">
-                                {msg.data.graph.description}
-                              </p>
-                            )}
-                            <div className="rounded-lg overflow-hidden bg-white border border-border">
-                              <GraphImage imageData={msg.data.graph.image} description={msg.data.graph.description} />
+                        {msg.data.graph &&
+                          msg.data.graph.image &&
+                          (revealingSections[idx] || []).includes('graph') && (
+                            <div className="bg-card-opacity backdrop-blur-sm rounded-2xl border border-border p-6 animate-fadeIn">
+                              <h3 className="text-lg font-semibold text-text-primary mb-3">
+                                Graph
+                              </h3>
+                              {msg.data.graph.description && (
+                                <p className="text-text-primary text-sm mb-4 leading-relaxed">
+                                  {msg.data.graph.description}
+                                </p>
+                              )}
+                              <div className="rounded-lg overflow-hidden bg-white border border-border">
+                                <GraphImage imageData={msg.data.graph.image} description={msg.data.graph.description} />
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
 
                         {/* Code */}
                         {msg.data.code && isCodeContentMeaningful(msg.data.code) &&
                           (revealingSections[idx] || []).includes('code') && (
-                          <div className="bg-card-opacity backdrop-blur-sm rounded-2xl border border-border p-6 animate-fadeIn overflow-hidden">
-                            <h3 className="text-lg font-semibold text-text-primary mb-3">
-                              Code Example
-                            </h3>
-                            <div className="rounded-lg overflow-hidden bg-white border border-border">
-                              <CodeRenderer content={msg.data.code} />
+                            <div className="bg-card-opacity backdrop-blur-sm rounded-2xl border border-border p-6 animate-fadeIn overflow-hidden">
+                              <h3 className="text-lg font-semibold text-text-primary mb-3">
+                                Code Example
+                              </h3>
+                              <div className="rounded-lg overflow-hidden bg-white border border-border">
+                                <CodeRenderer content={msg.data.code} />
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
 
                         {/* Video Generation */}
                         {(revealingSections[idx] || []).includes('video') && (
                           (() => {
                             const videoSectionId = `video-${idx}`
                             const showDelayedMessage = videoTimers[videoSectionId]
-                            
+
                             return (
                               <div className="bg-card-opacity backdrop-blur-sm rounded-2xl border border-border p-6 animate-fadeIn">
                                 <h3 className="text-lg font-semibold text-text-primary mb-3">
                                   Video Generated
                                 </h3>
-                                <div className={`rounded-lg overflow-hidden border border-border min-h-[300px] flex flex-col items-center justify-center ${
-                                  showDelayedMessage 
-                                    ? 'bg-gradient-to-br from-yellow-50 to-yellow-100' 
-                                    : 'bg-gradient-to-br from-gray-50 to-gray-100'
-                                }`}>
+                                <div className={`rounded-lg overflow-hidden border border-border min-h-[300px] flex flex-col items-center justify-center ${showDelayedMessage
+                                  ? 'bg-gradient-to-br from-yellow-50 to-yellow-100'
+                                  : 'bg-gradient-to-br from-gray-50 to-gray-100'
+                                  }`}>
                                   <div className="flex flex-col items-center justify-center space-y-4 px-6">
                                     <div className="flex gap-1">
-                                      <div className={`w-3 h-3 rounded-full animate-bounce ${
-                                        showDelayedMessage ? 'bg-yellow-500' : 'bg-blue-500'
-                                      }`} style={{ animationDelay: '0ms', animationDuration: '1.4s' }}></div>
-                                      <div className={`w-3 h-3 rounded-full animate-bounce ${
-                                        showDelayedMessage ? 'bg-yellow-500' : 'bg-blue-500'
-                                      }`} style={{ animationDelay: '200ms', animationDuration: '1.4s' }}></div>
-                                      <div className={`w-3 h-3 rounded-full animate-bounce ${
-                                        showDelayedMessage ? 'bg-yellow-500' : 'bg-blue-500'
-                                      }`} style={{ animationDelay: '400ms', animationDuration: '1.4s' }}></div>
+                                      <div className={`w-3 h-3 rounded-full animate-bounce ${showDelayedMessage ? 'bg-yellow-500' : 'bg-blue-500'
+                                        }`} style={{ animationDelay: '0ms', animationDuration: '1.4s' }}></div>
+                                      <div className={`w-3 h-3 rounded-full animate-bounce ${showDelayedMessage ? 'bg-yellow-500' : 'bg-blue-500'
+                                        }`} style={{ animationDelay: '200ms', animationDuration: '1.4s' }}></div>
+                                      <div className={`w-3 h-3 rounded-full animate-bounce ${showDelayedMessage ? 'bg-yellow-500' : 'bg-blue-500'
+                                        }`} style={{ animationDelay: '400ms', animationDuration: '1.4s' }}></div>
                                     </div>
                                     <div className="text-center">
                                       {showDelayedMessage ? (
@@ -652,7 +729,7 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
               )}
             </div>
           ))}
-          
+
           {(loading || isRevealing) && (
             <div className="flex justify-start">
               <div className="rounded-2xl px-6 py-4 bg-card-opacity backdrop-blur-sm border border-border">
@@ -669,7 +746,7 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
               </div>
             </div>
           )}
-          
+
           <div ref={messagesEndRef} />
         </div>
       </div>
@@ -685,7 +762,7 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
               >
                 <Plus className="w-5 h-5 text-icon-on-button" />
               </button>
-              
+
               <input
                 type="text"
                 value={input}
@@ -700,7 +777,7 @@ function Chat({ initialQuery, onResponseUpdate, apiEndpoint, onApiEndpointChange
                   }
                 }}
               />
-              
+
               <button
                 type="submit"
                 disabled={!input.trim() || loading}
